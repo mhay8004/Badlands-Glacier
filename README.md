@@ -16,7 +16,7 @@ Badlands - Basin & Landscape Dynamics - pyGlacier Model
 <div align="center">
     <img width=1000 src="https://github.com/badlands-model/badlands/blob/master/badlands/docs/img/view.jpg?raw=true" alt="sketch Badlands" title="sketch of Badlands range of models."</img>
 </div>
-<img width="804" alt="glaciers_model_closeup" src="https://github.com/user-attachments/assets/0e2df5bd-2069-4f9b-ac36-4252c1802754">
+<img width="1000" alt="glaciers_model_closeup" src="https://github.com/user-attachments/assets/0e2df5bd-2069-4f9b-ac36-4252c1802754">
 
 
 Basin and Landscape Dynamics (Badlands) is a long-term surface evolution model built to simulate landscape development, sediment transport and sedimentary basins formation from upstream regions down to marine environments.
