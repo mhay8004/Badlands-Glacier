@@ -13,9 +13,6 @@ Badlands - Basin & Landscape Dynamics - pyGlacier Model
 [![Docker Pulls](https://img.shields.io/docker/pulls/badlandsmodel/pybadlands-demo-serial)](https://cloud.docker.com/u/badlandsmodel/repository/docker/badlandsmodel/badlands)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/badlands-model/badlands-teaching/binder)
 
-<div align="center">
-    <img width=1000 src="https://github.com/badlands-model/badlands/blob/master/badlands/docs/img/view.jpg?raw=true" alt="sketch Badlands" title="sketch of Badlands range of models."</img>
-</div>
 <img width="1000" alt="glaciers_model_closeup" src="https://github.com/user-attachments/assets/0e2df5bd-2069-4f9b-ac36-4252c1802754">
 
 
