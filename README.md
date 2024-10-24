@@ -1,4 +1,4 @@
-Badlands - Basin & Landscape Dynamics
+Badlands - Basin & Landscape Dynamics - pyGlacier Model
 =====
 
 [![code](https://img.shields.io/badge/code-badlands-orange)](https://pypi.org/project/badlands)
@@ -36,6 +36,7 @@ Badlands is an open-source Python-based code and can be used to simulate:
 + submarine gravity currents (turbidity currents),
 + spatially and temporally varying tectonic (horizontal + vertical displacements) and
 + effects of climate changes (rainfall) and/or sea-level fluctuations.
++ glacial erosion and glaciers
 
 
 ## Documentation & Installation
