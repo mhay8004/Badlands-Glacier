@@ -11,17 +11,20 @@ Badlands - Basin & Landscape Dynamics
 
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/badlandsmodel/pybadlands-demo-serial)](https://cloud.docker.com/u/badlandsmodel/repository/docker/badlandsmodel/badlands)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/badlands-model/badlands-docker/binder?filepath=StartHere.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/badlands-model/badlands-teaching/binder)
 
 <div align="center">
-    <img width=1000 src="https://github.com/badlands-model/badlands/blob/master/badlands/docs/img/view.jpg?raw=true" alt="sketch Badlands" title="sketch of Badlands range of models."</img>
+    <img width="1000" alt="glaciers_model_closeup" src="https://github.com/user-attachments/assets/0e2df5bd-2069-4f9b-ac36-4252c1802754"
+    </img>
 </div>
 
 
 Basin and Landscape Dynamics (Badlands) is a long-term surface evolution model built to simulate landscape development, sediment transport and sedimentary basins formation from upstream regions down to marine environments.
 
+This version is fitted to include Glaciers and Glacial erosion.
 
-> This program is free software: you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+> This program is a free software: you can redistribute it and/or modify it under the terms of the GNU Lesser General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 
 ## What’s in the box?
@@ -36,6 +39,7 @@ Badlands is an open-source Python-based code and can be used to simulate:
 + submarine gravity currents (turbidity currents),
 + spatially and temporally varying tectonic (horizontal + vertical displacements) and
 + effects of climate changes (rainfall) and/or sea-level fluctuations.
++ Glaciers and glacial erosion processes
 
 
 ## Documentation & Installation
