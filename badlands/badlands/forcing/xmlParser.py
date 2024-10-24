@@ -222,6 +222,23 @@ class xmlParser:
         self.pelGrowth = 0.0
         self.pelDepth = None
 
+        #Matt Update
+        self.iceFlag = False
+        self.hTerm = None
+        self.hEla = None
+        self.KIce = None
+        self.smth = 1.4
+
+        #Matt Update
+        self.hIcecap = None
+        self.KCap = None
+        self.icefile_term = None
+        self.icefile_ela = None
+        self.icefile_cap = None
+        self.ice_max = 100
+        self.ice_spread = 0.85
+
+
         self._get_XmL_Data()
 
     def _get_XmL_Data(self):
@@ -1093,6 +1110,119 @@ class xmlParser:
             self.SPLn = 1.0
             self.SPLero = 0.0
             self.diffnb = 5
+
+        #Matt Update
+        # Extract Glacier Calculation parameters
+        ice_law = None
+        ice_law = root.find("ice_law")
+        
+        if ice_law is not None:
+            #Matt Update
+            print("Glaciers Found")
+
+            self.iceFlag = True
+
+            element = None
+            element = ice_law.find("hTerm")
+            if element is not None:
+                self.hTerm = element.text
+                if os.path.isfile(self.hTerm):
+                    self.hTerm = element.text
+                    #Matt Update
+                    print("hTerm file found: ", self.hTerm)
+                else:
+                    self.hTerm = float(element.text)
+                    #Matt Update
+                    print("hTerm: ", self.hTerm)       
+            else:
+                self.hTerm = None
+
+            element = None
+            element = ice_law.find("hEla")
+            if element is not None:
+                self.hEla = element.text
+                if os.path.isfile(self.hEla):
+                    self.hEla = element.text
+                    #Matt Update
+                    print("hEla file found: ", self.hEla)
+                else:
+                    self.hEla = float(element.text)
+                    #Matt Update
+                    print("hEla: ", self.hEla)       
+            else:
+                self.hEla = None
+            
+            element = None
+            element = ice_law.find("KIce")
+            if element is not None:
+                self.KIce = float(element.text)
+                #Matt Update
+                print("KIce: ", self.KIce)
+            else:
+                self.KIce = None
+                        
+            element = None
+            element = ice_law.find("smth")
+            if element is not None:
+                self.smth = float(element.text)
+                #Matt Update
+                print("smth: ", self.smth)
+            else:
+                self.smth = 1.4
+            
+            element = None
+            element = ice_law.find("ice_max")
+            if element is not None:
+                self.ice_max = float(element.text)
+                #Matt Update
+                print("ice_max: ", self.ice_max)
+            else:
+                self.ice_max = 100
+            
+            element = None
+            element = ice_law.find("ice_spread")
+            if element is not None:
+                self.ice_spread = float(element.text)
+                #Matt Update
+                print("ice_spread: ", self.ice_spread)
+            else:
+                self.ice_spread = 0.85
+            
+            element = None
+            element = ice_law.find("KCap")
+            if element is not None:
+                self.KCap = float(element.text)
+                #Matt Update
+                print("KCap: ", self.KCap)
+            else:
+                self.KCap = self.KIce
+            
+            element = None
+            element = ice_law.find("hIcecap")
+            if element is not None:
+                self.hIcecap = element.text
+                if os.path.isfile(self.hIcecap):
+                    self.hIcecap = element.text
+                    #Matt Update
+                    print("hIcecap file found: ", self.hIcecap)
+                else:
+                    self.hIcecap = float(element.text)
+                    #Matt Update
+                    print("hIcecap: ", self.hIcecap)       
+            else:
+                self.hIcecap = None
+
+        else:
+            self.hTerm = None
+            self.hEla = None
+            self.KIce = None
+            self.ice_max = None
+            self.smth = None
+            self.KCap = None
+            self.hIcecap = None
+            self.ice_spread = None
+
+
 
         # Extract flux-dependent function structure parameters
         erof = None

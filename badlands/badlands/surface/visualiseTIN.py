@@ -123,6 +123,7 @@ def write_hdf5(
     rockOn,
     prop,
     sealevel,
+    iceTH
 ):
     """
     This function writes for each processor the **hdf5** file containing surface information.
@@ -192,6 +193,15 @@ def write_hdf5(
                 compression="gzip",
             )
             f["erodibility"][:, 0] = erodibility
+
+        if iceTH is not None:
+            f.create_dataset(
+                "iceTH",
+                shape=(len(discharge), 1),
+                dtype="float64",
+                compression="gzip",
+            )
+            f["iceTH"][:, 0] = iceTH
 
         f.create_dataset(
             "cumdiff", shape=(len(discharge), 1), dtype="float64", compression="gzip"
@@ -284,6 +294,7 @@ def write_hdf5_flexure(
     rockOn,
     prop,
     sealevel,
+    iceTH
 ):
     """
     This function writes for each processor the **hdf5** file containing surface information
@@ -366,6 +377,15 @@ def write_hdf5_flexure(
                 compression="gzip",
             )
             f["erodibility"][:, 0] = erodibility
+
+        if iceTH is not None:
+            f.create_dataset(
+                "iceTH",
+                shape=(len(iceTH), 1),
+                dtype="float64",
+                compression="gzip",
+            )
+            f["iceTH"][:, 0] = iceTH
 
         f.create_dataset(
             "cumdiff", shape=(len(discharge), 1), dtype="float64", compression="gzip"
@@ -488,6 +508,7 @@ def write_xmf(
     waveOn,
     rockOn,
     nbSed,
+    iceTH
 ):
     """
     This function writes the **XmF** file which is calling each **hdf5** file.
@@ -579,6 +600,12 @@ def write_xmf(
         f.write('         <Attribute Type="Scalar" Center="Node" Name="Ke">\n')
         f.write('          <DataItem Format="HDF" NumberType="Float" Precision="4" ')
         f.write('Dimensions="%d 1">%s:/erodibility</DataItem>\n' % (nodes[p], pfile))
+        f.write("         </Attribute>\n")
+
+    if iceTH is not None:
+        f.write('         <Attribute Type="Scalar" Center="Node" Name="iceTH">\n')
+        f.write('          <DataItem Format="HDF" NumberType="Float" Precision="4" ')
+        f.write('Dimensions="%d 1">%s:/iceTH</DataItem>\n' % (nodes[p], pfile))
         f.write("         </Attribute>\n")
 
     if waveOn:

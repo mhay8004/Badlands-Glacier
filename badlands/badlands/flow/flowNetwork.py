@@ -132,6 +132,21 @@ class flowNetwork:
         self.insideIDs2 = None
         self.outsideIDs2 = None
 
+        # Matt Update
+        self.FA_RiverRun = None
+        self.FA_Ice = None
+        self.FA_Total = None
+        self.eroCoeff_Ice = None
+        self.eroCoeff_River = None
+        self.iceTH = None
+        self.smth = input.smth
+        self.iceFlag = input.iceFlag
+        self.KCap = input.KCap
+        self.KIce = input.KIce
+        self.ice_max = input.ice_max
+        self.ice_spread = input.ice_spread
+        self.slopeTIN = None
+
         flowalgo.eroparams(
             input.incisiontype,
             input.SPLm,
@@ -550,7 +565,6 @@ class flowNetwork:
             Acell: numpy float-type array containing the voronoi area for each nodes (in :math:`{m}^2`).
             rain: numpy float-type array containing the precipitation rate for each nodes (in :math:`{m/a}`).
         """
-
         numPts = len(Acell)
 
         self.discharge = numpy.zeros(numPts, dtype=float)
@@ -562,6 +576,71 @@ class flowNetwork:
         )
 
         return
+    
+    # Matt Update
+    def cmptTotalflow(self, sealevel, elev, Acell, rain, hTerm, hEla):
+
+        # Find Size of Array
+        numPts = len(Acell)
+
+        # Create Arrays of equal size to Original, empty
+        pIce = numpy.zeros(numPts, dtype=float)
+        pdischarge = numpy.zeros(numPts, dtype=float)
+
+        # Calculate pIRatio using the inverted parabolic function
+        pIRatio = numpy.where(
+            elev >= hEla,  # Condition for pIRatio = 1
+            1,             # Value if condition is True
+            numpy.where(
+                (hTerm <= elev) & (elev < hEla),  # Condition for 0 < pIRatio < 1
+                numpy.log10(1 + 9 * (elev - hTerm) / (hEla - hTerm)),  # Value if condition is True
+                0  # Value if all conditions are False
+            )
+        )
+
+        pIRatio[elev<=sealevel] = 0.
+
+        # Get ice thickness Ratio for transition zone
+        thRatio = pIRatio.copy()
+        thRatio[thRatio>1] = 1
+        thRatio[thRatio<0] = 0
+
+        # pIce Full Calculation
+        pIce = rain * numpy.minimum(pIRatio, 1)
+
+        # Set pIce to 0 where elev is below or equal to hTerm
+        pIce = numpy.where(elev <= hTerm, 0, pIce)
+
+        # Adjusted using pIRatio
+        pdischarge[self.stack] = pIRatio * Acell[self.stack] * rain[self.stack]
+        pIce = pdischarge[self.stack].copy()
+
+        # River Discharge Model
+        pdischarge[self.stack] = (1 - pIRatio) * Acell[self.stack] * rain[self.stack]
+        pRiver = pdischarge[self.stack].copy()
+
+        # Compute discharge using libUtils
+        FA_Rain, self.activelay = flowalgo.discharge(sealevel, self.localstack, self.receivers, elev, pRiver)
+
+        # Compute discharge using libUtils
+        icedischarge, self.activelay = flowalgo.discharge(sealevel, self.localstack, self.receivers, elev, pIce)
+        
+        # This controls the extra runoff which appears. Uncomment to limit it.
+        icedischarge_ela = numpy.where(elev <= hTerm, 0, icedischarge)
+        icedischarge_riv = numpy.where(elev > hTerm, 0, icedischarge)
+
+        # Smoothing glacial flow accumulation above ELA
+        smthFAi = self._gaussian_diffusion(icedischarge_ela, self.smth)
+        self.FA_Ice = numpy.where(elev <= hTerm, 0, smthFAi)
+
+        # Factor in glacial runoff into fluvial discharge
+        self.FA_RiverRun = (FA_Rain + icedischarge_riv)
+
+        # Combine 
+        self.FA_Total = self.FA_RiverRun + smthFAi
+
+        return
+    
 
     def view_receivers(self, fillH, elev, neighbours, edges, distances, globalIDs, sea):
         """
@@ -614,6 +693,7 @@ class flowNetwork:
 
         return
 
+
     def compute_parameters(self, elevation, sealevel):
         """
         Calculates the catchment IDs and the Chi parameter (Willett 2014).
@@ -623,6 +703,15 @@ class flowNetwork:
         cumbase = numpy.zeros(2)
         for i in range(1):
             cumbase[i + 1] = len(numpy.array_split(self.base, 1)[i]) + cumbase[i] + 1
+
+        #Matt update
+        # Conditionally assign discharge based on self.iceFlag
+        if self.iceFlag:
+            # If self.iceFlag is True, use self.FA_Total for discharge
+            self.discharge = self.FA_Total  
+        else:
+            # If self.iceFlag is False, keep self.discharge unchanged
+            self.discharge = self.discharge
 
         # Compute discharge using libUtils
         idsl = numpy.where(elevation < sealevel)[0]
@@ -637,6 +726,7 @@ class flowNetwork:
         self.basinID[idsl] = -1
 
         return
+
 
     def compute_parameters_depression(self, fillH, elev, Acell, sealevel, debug=False):
         """
@@ -762,7 +852,7 @@ class flowNetwork:
             if actlay is None:
                 actlay = numpy.zeros((len(elev), 1))
 
-            cdepo, cero, sedload, slopeTIN, flowdensity = flowalgo.streampower(
+            cdepo, cero, sedload, self.slopeTIN, flowdensity = flowalgo.streampower(
                 self.critdens,
                 self.localstack,
                 self.receivers,
@@ -786,6 +876,7 @@ class flowNetwork:
                 newdt,
                 self.borders,
             )
+
             if self.depo == 0:
                 volChange = cero
             else:
@@ -830,7 +921,7 @@ class flowNetwork:
                 time1 = time.process_time()
 
             if newdt < dt:
-                cdepo, cero, sedload, slopeTIN, flowdensity = flowalgo.streampower(
+                cdepo, cero, sedload, self.slopeTIN, flowdensity = flowalgo.streampower(
                     self.critdens,
                     self.localstack,
                     self.receivers,
@@ -968,7 +1059,7 @@ class flowNetwork:
                     seavol = numpy.zeros(depo.shape)
                     seavol[seaIDs, :] = depo[seaIDs, :]
                     seadep = pdalgo.marine_distribution(
-                        elev, seavol, sealevel, self.borders, seaIDs, slopeTIN
+                        elev, seavol, sealevel, self.borders, seaIDs, self.slopeTIN
                     )
                     deposition += seadep
                     # depo -= seadep*Acell.reshape(len(Acell),1)
@@ -1010,7 +1101,477 @@ class flowNetwork:
             if verbose:
                 print("   - Total sediment flux time ", time.process_time() - time0)
 
-        return newdt, sedflux, erosion, deposition, slopeTIN
+        return newdt, sedflux, erosion, deposition, self.slopeTIN
+
+    # Matt Update
+    def compute_sedflux_glacier(
+        self,
+        Acell,
+        elev,
+        rain,
+        fillH,
+        dt,
+        actlay,
+        rockCk,
+        rivQs,
+        sealevel,
+        perc_dep,
+        slp_cr,
+        ngbh,
+        hIcecap,
+        verbose=False,
+    ):
+        """
+        This calculates the **sediment flux** at each node, IF glacial erosion is activated.        
+
+        Args:
+            Acell: numpy float-type array containing the voronoi area for each nodes (in :math:`{m}^2`)
+            elev: numpy arrays containing the elevation of the TIN nodes.
+            rain: numpy float-type array containing the precipitation rate for each nodes (in :math:`{m/a}`).
+            fillH: numpy array containing the lake elevations.
+            dt: real value corresponding to the maximal stability time step.
+            actlay: active layer composition.
+            rockCk: rock erodibility values.
+            rivqs: numpy arrays representing the sediment fluxes from rivers.
+            sealevel: real value giving the sea-level height at considered time step.
+            perc_dep: maximum percentage of deposition at any given time interval.
+
+            
+        Returns
+        -------
+        erosion
+            numpy array containing erosion thicknesses for each node of the TIN (in m).
+        depo
+            numpy array containing deposition thicknesses for each node of the TIN (in m).
+        sedflux
+            numpy array containing cumulative sediment flux on each node  (in :math:`{m}^3/{m}^2`).
+        newdt
+            new time step to ensure flow computation stability.
+
+        """
+
+        check = False
+        
+        newdt = numpy.copy(dt)
+
+        if actlay is None:
+            sedflux = numpy.zeros((len(elev), 1))
+        else:
+            sedflux = numpy.zeros((len(elev), len(rockCk)))
+
+        # Compute sediment flux using libUtils
+        # Stream power law
+        if self.spl:
+            if verbose:
+                time0 = time.process_time()
+                time1 = time.process_time()
+
+            # Find border/inside nodes
+            if self.mp > 0.0:
+                if self.straTIN == 1:
+                    rp = numpy.power(rain, self.flow_mp).reshape((len(elev), 1))
+                    eroCoeff = rockCk * rp
+                else:
+                    eroCoeff = self.erodibility * numpy.power(rain, self.mp)
+                    eroCoeff.reshape((len(elev), 1))
+            else:
+                if self.straTIN == 1:
+                    eroCoeff = numpy.tile(rockCk, (len(elev), 1))
+                else:
+                    self.eroCoeff_River = self.erodibility.reshape((len(elev), 1))
+                    self.eroCoeff_Ice = numpy.full((len(elev), 1), self.KIce)
+                    
+                    #Matt Update
+                    if hIcecap is not None:
+                        self.eroCoeff_Ice[elev > hIcecap] = self.KCap
+                        
+            if actlay is None:
+                actlay = numpy.zeros((len(elev), 1))
+
+            #ICE Stream Power Application
+            cdepo_ice, cero_ice, sedload_ice, slopeTIN_ice, flowdensity_ice = flowalgo.streampower(
+                 self.critdens,
+                 self.localstack,
+                 self.receivers,
+                 self.pitID,
+                 self.pitVolume,
+                 self.pitDrain,
+                 self.xycoords,
+                 Acell,
+                 self.maxh,
+                 self.maxdep,
+                 self.FA_Ice,
+                 fillH,
+                 elev,
+                 rivQs,
+                 self.eroCoeff_Ice,
+                 actlay,
+                 perc_dep,
+                 slp_cr,
+                 sealevel,
+                 sealevel + self.deepb,
+                 newdt,
+                 self.borders,
+            )
+
+            #self.FA_RiverRun = 
+
+            #RIVER Stream Power Application
+            cdepo_river, cero_river, sedload_river, slopeTIN_river, flowdensity_river = flowalgo.streampower(
+                self.critdens,
+                self.localstack,
+                self.receivers,
+                self.pitID,
+                self.pitVolume,
+                self.pitDrain,
+                self.xycoords,
+                Acell,
+                self.maxh,
+                self.maxdep,
+                self.FA_RiverRun,
+                fillH,
+                elev,
+                cdepo_ice/newdt,
+                self.eroCoeff_River,
+                actlay,
+                perc_dep,
+                slp_cr,
+                sealevel,
+                sealevel + self.deepb,
+                newdt,
+                self.borders,
+            )
+
+            #Matt Update
+            cdepo_ice = numpy.zeros(cdepo_river.shape)
+
+            #Combination for further use:
+            cdepo = cdepo_river.copy() #+ cdepo_ice
+            cero = cero_river + cero_ice
+            sedload = sedload_river + sedload_ice
+            self.slopeTIN = numpy.maximum(slopeTIN_river, slopeTIN_ice)
+            flowdensity = numpy.maximum(flowdensity_river, flowdensity_ice)
+
+            if self.depo == 0:
+                volChange = cero
+            else:
+                volChange = cdepo + cero
+            if verbose:
+                print(
+                    "   - Compute sediment volumetric flux ",
+                    time.process_time() - time1,
+                )
+                time1 = time.process_time()
+
+            # Find overfilling catchments
+            tmpChange, id1, id2, nb1, nb2 = flowalgo.getid1(
+                volChange, self.pitVolume, self.allDrain, self.pitID
+            )
+
+            # Check if there are some internally drained depressions within the computational domain?
+            if nb1 > 0 and nb2 > 0:
+                ids = id1[:nb1]
+                intID = id2[:nb2]
+                search = self.domain.contains_points(self.xycoords[intID])
+                # For all these closed basins find the ones overfilled
+                if len(search) > 0:
+                    overfilled = numpy.intersect1d(intID[search], ids)
+                    # Limit the time step to restrict deposition in these basins
+                    if len(overfilled) > 0:
+                        # Compute the percentage of overfilling
+                        percOver = self.pitVolume[overfilled] / tmpChange[overfilled]
+                        newdt = dt * percOver.min()
+
+            if newdt > 1.0:
+                newdt = float(round(newdt - 0.5, 0))
+            newdt = max(self.mindt, newdt)
+            if newdt > dt:
+                newdt = dt
+
+            if verbose:
+                print(
+                    "   - Compute depressions connectivity ",
+                    time.process_time() - time1,
+                )
+                time1 = time.process_time()
+
+            if newdt < dt:
+                
+                #ICE Stream Power Application
+                cdepo_ice, cero_ice, sedload_ice, slopeTIN_ice, flowdensity_ice = flowalgo.streampower(
+                    self.critdens,
+                    self.localstack,
+                    self.receivers,
+                    self.pitID,
+                    self.pitVolume,
+                    self.pitDrain,
+                    self.xycoords,
+                    Acell,
+                    self.maxh,
+                    self.maxdep,
+                    self.FA_Ice,
+                    fillH,
+                    elev,
+                    rivQs,
+                    self.eroCoeff_Ice,
+                    actlay,
+                    perc_dep,
+                    slp_cr,
+                    sealevel,
+                    sealevel + self.deepb,
+                    newdt,
+                    self.borders,
+                )
+
+                #RIVER Stream Power Application
+                cdepo_river, cero_river, sedload_river, slopeTIN_river, flowdensity_river = flowalgo.streampower(
+                    self.critdens,
+                    self.localstack,
+                    self.receivers,
+                    self.pitID,
+                    self.pitVolume,
+                    self.pitDrain,
+                    self.xycoords,
+                    Acell,
+                    self.maxh,
+                    self.maxdep,
+                    self.FA_RiverRun,
+                    fillH,
+                    elev,
+                    cdepo_ice/newdt,
+                    self.eroCoeff_River,
+                    actlay,
+                    perc_dep,
+                    slp_cr,
+                    sealevel,
+                    sealevel + self.deepb,
+                    newdt,
+                    self.borders,
+                )          
+
+                #Matt Update
+                cdepo_ice = numpy.zeros(cdepo_river.shape)
+
+                #Combination for further use:
+                cdepo = cdepo_river.copy() #+ cdepo_ice
+                cero = cero_river + cero_ice
+                sedload = sedload_river + sedload_ice
+                self.slopeTIN = numpy.maximum(slopeTIN_river, slopeTIN_ice)
+                flowdensity = numpy.maximum(flowdensity_river, flowdensity)
+            
+                volChange = cdepo + cero
+
+                if verbose:
+                    print(
+                        "   - Compute volumetric fluxes with updated dt ",
+                        time.process_time() - time1,
+                    )
+                    time1 = time.process_time()
+
+                if check:
+                    # Ensure no overfilling remains
+                    tmpChange = numpy.sum(volChange, axis=1)
+                    ids = numpy.where(
+                        numpy.logical_and(
+                            tmpChange > self.pitVolume, self.pitVolume > 0.0
+                        )
+                    )[0]
+                    search = self.domain.contains_points(self.xycoords[intID])
+                    if (len(search) > 0) and (len(ids) > 0):
+                        overfilled = numpy.intersect1d(intID[search], ids)
+                        if len(overfilled) > 0:
+                            print(
+                                "WARNING: overfilling persists after time-step limitation.",
+                                len(overfilled),
+                            )
+
+            # Update river sediment load in m3/s
+            sedld = numpy.sum(sedload, axis=1)
+            self.sedload = sedld / (newdt * 3.154e7)
+            den = flowdensity / 1000.0
+            self.flowdensity = den
+            # Sediment volume going out
+            outload = numpy.sum(sedload[self.outsideIDs, :])
+
+            # Compute erosion
+            erosion = numpy.zeros(cero.shape)
+            erosion[self.insideIDs, :] = cero[self.insideIDs, :] / Acell[
+                self.insideIDs
+            ].reshape(len(self.insideIDs), 1)
+            if verbose:
+                print("   - Compute erosion ", time.process_time() - time1)
+                time1 = time.process_time()
+
+            # Compute deposition
+            if self.depo == 0:
+                # Purely erosive case
+                deposition = numpy.zeros(cdepo.shape)
+            else:
+                depo = numpy.zeros(cdepo.shape)
+                depo[self.insideIDs, :] = cdepo[self.insideIDs, :]
+                deposition = numpy.zeros(depo.shape)
+                tmpdep = numpy.zeros(depo.shape)
+
+                # Compute alluvial plain deposition
+                (
+                    plainid,
+                    landid,
+                    seaid,
+                    perc,
+                    nplain,
+                    nland,
+                    nsea,
+                    ndepo,
+                ) = flowalgo.getids(fillH, elev, depo, self.pitVolume, sealevel)
+                depo = ndepo
+
+                if nplain > 0:
+                    plainID = plainid[:nplain]
+                    deposition[plainID, :] += depo[plainID, :] / Acell[plainID].reshape(
+                        len(plainID), 1
+                    )
+                    depo[plainID, :] = 0.0
+                    # depo[plainID,:] -= depo[plainID,:]
+                    if verbose:
+                        print(
+                            "   - Compute plain deposition ",
+                            time.process_time() - time1,
+                        )
+                        time1 = time.process_time()
+
+                # Compute land pit deposition
+                if nland > 0:
+                    landIDs = landid[:nland]
+                    for p in range(len(landIDs)):
+                        tmp = numpy.where(self.pitID == landIDs[p])[0]
+                        if len(tmp) == 1:
+                            tmpdep[tmp, :] = (fillH[tmp] - elev[tmp]) * perc[
+                                landIDs[p], :
+                            ]
+                        else:
+                            tmpdep[tmp, :] = (fillH[tmp] - elev[tmp]).reshape(
+                                len(tmp), 1
+                            ) * perc[landIDs[p], :]
+                        tmpd = numpy.sum(
+                            tmpdep[tmp, :] * Acell[tmp].reshape(len(Acell[tmp]), 1)
+                        )
+                        dfrac = numpy.sum(depo[landIDs[p], :]) / tmpd
+                        tmpdep[tmp, :] *= dfrac
+                        deposition[tmp, :] += tmpdep[tmp, :]
+                        # depo[tmp,:] -= tmpdep[tmp,:]*Acell[tmp].reshape(len(Acell[tmp]),1)
+                    depo[landIDs, :] = 0.0
+                    if verbose:
+                        print(
+                            "   - Compute land pit deposition ",
+                            time.process_time() - time1,
+                        )
+                        time1 = time.process_time()
+
+                # Compute water deposition
+                if nsea > 0:
+                    # Distribute marine sediments based on angle of repose
+                    seaIDs = seaid[:nsea]
+                    seavol = numpy.zeros(depo.shape)
+                    seavol[seaIDs, :] = depo[seaIDs, :]
+                    seadep = pdalgo.marine_distribution(
+                        elev, seavol, sealevel, self.borders, seaIDs, self.slopeTIN
+                    )
+                    deposition += seadep
+                    # depo -= seadep*Acell.reshape(len(Acell),1)
+                    depo[seaIDs, :] = 0.0
+                    if verbose:
+                        print(
+                            "   - Compute marine deposition ",
+                            time.process_time() - time1,
+                        )
+                        time1 = time.process_time()
+
+                # Is there some remaining deposits?
+                if numpy.any(depo):
+                    deposition[self.insideIDs, :] += depo[self.insideIDs, :] / Acell[
+                        self.insideIDs
+                    ].reshape(len(self.insideIDs), 1)
+
+            # Define erosion/deposition changes
+            sedflux[self.insideIDs, :] = (
+                erosion[self.insideIDs, :] + deposition[self.insideIDs, :]
+            )
+
+            erotot = -numpy.sum(
+                erosion[self.insideIDs, :]
+                * Acell[self.insideIDs].reshape(len(self.insideIDs), 1)
+            )
+            depotot = numpy.sum(
+                deposition[self.insideIDs, :]
+                * Acell[self.insideIDs].reshape(len(self.insideIDs), 1)
+            )
+            depotot += outload
+            if self.depo > 0 and erotot > depotot and erotot > 0.0:
+                frac = depotot / erotot
+                erosion[self.insideIDs, :] *= frac
+                sedflux[self.insideIDs, :] = (
+                    erosion[self.insideIDs, :] + deposition[self.insideIDs, :]
+                )
+
+            if verbose:
+                print("   - Total fluvial and glacial sediment flux time ", time.process_time() - time0)
+        
+        
+        return newdt, sedflux, erosion, deposition, self.slopeTIN
+
+
+
+    def cmptIceThickness(self, sealevel, elev, hTerm, hEla):
+
+        # Convert glacial flow accumulation into ice thickness
+        scaled_FAi = (self.FA_Ice - numpy.min(self.FA_Ice)) / (numpy.max(self.FA_Ice) - numpy.min(self.FA_Ice))
+
+        #Input Controlled Ice abundance parameter
+        scaler = numpy.percentile(scaled_FAi, self.ice_spread)
+
+        # Normalize slopeTIN to range between 0 and 1
+        norm_slopeTIN = self.slopeTIN / self.slopeTIN.max()
+        new_ice_max = self.ice_max * (1 - norm_slopeTIN) 
+
+        # Calculate pIRatio using the inverted parabolic function
+        pIRatio = numpy.where(
+            elev >= hEla,  # Condition for pIRatio = 1
+            1,             # Value if condition is True
+            numpy.where(
+                (hTerm <= elev) & (elev < hEla),  # Condition for 0 < pIRatio < 1
+                numpy.log10(1 + 9 * (elev - hTerm) / (hEla - hTerm)),  # Value if condition is True
+                0  # Value if all conditions are False
+            )
+        )
+
+        #Addiional control for sealevel
+        pIRatio[elev<=sealevel] = 0.
+
+        #Ice Thickness within transition zone
+        log_iceTH = new_ice_max * pIRatio     
+
+        #Applies a decrease in ice thickness above the accumulation elevation
+        linear_multiplier = 1 - (elev - hEla) / (elev.max() - hEla)
+        linear_multiplier[elev <= hEla] = 1 
+        new_ice_max = new_ice_max * linear_multiplier
+
+        #Set the ice thickness where elevation is greater than hEla and scaled_FAi is >= input percentile
+        self.iceTH = numpy.where(
+            ((elev > hEla) & (scaled_FAi >= scaler)),
+            new_ice_max,
+            numpy.where(
+                ((hTerm <= elev) & (elev < hEla) & (scaled_FAi >= scaler)),
+                log_iceTH,
+                0
+            )
+        )
+
+        # Smooth the final ice thickness
+        self.iceTH = self._gaussian_diffusion(self.iceTH, 0.2)
+
+        return 
+    
+
 
     def _gaussian_diffusion(self, diff, dsmooth):
         """

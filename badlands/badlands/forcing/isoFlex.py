@@ -53,6 +53,7 @@ class isoFlex:
         self.flex = None
         self.rho_s = 2500.0
         self.rho_w = 1029.0
+        self.rho_ice = 1000.0
         self.previous_flex = None
         self.tree = None
         self.Te = None
@@ -60,6 +61,11 @@ class isoFlex:
         self.Te1 = None
         self.dtime = 0.0
         self.ftime = None
+
+        #Matt Update
+        self.previous_iceflex = None
+        self.icethick = None
+        self.iceFlag = False
 
         return
 
@@ -208,7 +214,7 @@ class isoFlex:
 
         return
 
-    def get_flexure(self, elev, cumdiff, sea, boundsPt, initFlex=False):
+    def get_flexure(self, elev, cumdiff, sea, icethick, boundsPt, initFlex=False):
         """
         From TIN erosion/deposition values and sea-level compute the
         surface load on the flexural grid.
@@ -218,6 +224,7 @@ class isoFlex:
             cumdiff: numpy array containing TIN cumulative erosion/deposition
             boundsPt: number of points along the boundary
             sea: sea-level.
+            icethick: Glacier Ice mass
             initFlex: initialise simulation flexural values
 
         Returns:
@@ -227,27 +234,45 @@ class isoFlex:
         # Average volume of sediment and water on the flexural grid points
         sedload = numpy.zeros(len(self.xyi))
         waterload = numpy.zeros(len(self.xyi))
+
+        #Matt Update
+        iceload = numpy.zeros(len(self.xyi))
+
         distances, indices = self.tree.query(self.xyi, k=self.searchpts)
+
+        if icethick is None:
+            icethick = numpy.zeros(len(self.xyi))    
 
         if len(elev[indices].shape) == 3:
             elev_vals = elev[indices][:, :, 0]
             cum_vals = cumdiff[indices][:, :, 0]
+            ice_vals = icethick[indices][:, :, 0]
         else:
             elev_vals = elev[indices]
             cum_vals = cumdiff[indices]
+            ice_vals = icethick[indices]
+        
 
         distances[distances < 0.0001] = 0.0001
+
         with numpy.errstate(divide="ignore"):
             felev = numpy.average(elev_vals, weights=(1.0 / distances), axis=1)
             fcum = numpy.average(cum_vals, weights=(1.0 / distances), axis=1)
+            #Matt Update
+            fice = numpy.average(ice_vals, weights=(1.0 / distances), axis=1)
 
         onIDs = numpy.where(distances[:, 0] <= 0.0001)[0]
         if len(onIDs) > 0:
             felev[onIDs] = elev[indices[onIDs, 0]]
             fcum[onIDs] = cumdiff[indices[onIDs, 0]]
+            #Matt Update
+            fice[onIDs] = icethick[indices[onIDs, 0]]
         sedload = fcum
         marine = numpy.where(felev < sea)[0]
         waterload[marine] = sea - felev[marine]
+        
+        #Matt Update
+        iceload = fice
 
         # Compute surface loads
         self.flex.qs = (
@@ -255,6 +280,10 @@ class isoFlex:
         )
         self.flex.qs += (
             self.rho_s * self.flex.g * numpy.reshape(sedload, (self.ny, self.nx))
+        )
+        #Matt Update
+        self.flex.qs += (
+            self.rho_ice * self.flex.g * numpy.reshape(iceload, (self.ny, self.nx))
         )
 
         # Compute flexural isostasy with gFlex
@@ -265,14 +294,29 @@ class isoFlex:
         if initFlex:
             self.previous_flex = self.flex.w
             flexureTIN = numpy.zeros(len(self.xyTIN[:, 0]))
+
+            #Matt Update
+            self.previous_iceflex = iceload
+            #print("iceload:", self.previous_iceflex, self.previous_iceflex.shape)
+            #ice_diff = icethick.copy()
+            
+            
         else:
+            #Matt Update
+            ice_diff = iceload - self.previous_iceflex
+            self.previous_iceflex = iceload
+
             flexureTIN = numpy.zeros(len(self.xyTIN[:, 0]))
             flex_diff = self.flex.w - self.previous_flex
             self.previous_flex = self.flex.w
+
             rgi_flexure = RegularGridInterpolator((self.ygrid, self.xgrid), flex_diff)
+            rgi_flexure = rgi_flexure #+ ice_flexure
             flexureTIN[boundsPt:] = rgi_flexure(
                 (self.xyTIN[boundsPt:, 1], self.xyTIN[boundsPt:, 0])
             )
+
+            # ice_flexure = RegularGridInterpolator((self.ygrid, self.xgrid), ice_diff)
 
         self.dtime += self.ftime
 

@@ -97,9 +97,12 @@ def construct_mesh(input, filename, verbose=False):
     recGrid = raster2TIN.raster2TIN(filename, areaDelFactor=input.Afactor)
 
     fixIDs = recGrid.boundsPt + recGrid.edgesPt
-
+    
     force = forceSim.forceSim(
         input.seafile,
+        input.hTerm,
+        input.hEla,
+        input.hIcecap,
         input.seapos,
         input.rainMap,
         input.rainTime,
@@ -623,8 +626,13 @@ def _init_flexure(
     tinFlex = np.zeros(totPts, dtype=float)
     ref_elev = get_reference_elevation(input, recGrid, elevation)
     force.getSea(input.tStart, input.udw, ref_elev)
+
+    #Matt Update
+    iceTH = force.icethick
+    #iceTH = np.zeros(len(elevation))
+
     tinFlex = flex.get_flexure(
-        elevation, cumdiff, force.sealevel, recGrid.boundsPt, initFlex=True
+        elevation, cumdiff, force.sealevel, iceTH, recGrid.boundsPt, initFlex=True
     )
     tinFlex = force.disp_border(
         tinFlex, FVmesh.neighbours, FVmesh.edge_length, recGrid.boundsPt

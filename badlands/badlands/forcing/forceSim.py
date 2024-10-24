@@ -76,6 +76,9 @@ class forceSim:
     def __init__(
         self,
         seafile=None,
+        hTerm = None,
+        hEla = None,
+        hIcecap = None,
         sea0=0.0,
         MapRain=None,
         TimeRain=None,
@@ -188,8 +191,24 @@ class forceSim:
         self.carbValSp2 = carbValSp2
         self.T_carb = TimeCarb
 
+        #Matt Update
+        self.hTerm = hTerm
+        self.hEla = hEla
+        self.hIcecap = hIcecap
+        self.termFunc = None
+        self.elaFunc = None
+        self.icecapFunc = None
+        self.termtime = None
+        self.elatime = None
+        self.icecaptime = None
+        self.ice_max = None
+        self.icethick = None
+
         if self.seafile != None:
             self._build_Sea_function()
+        if self.hTerm != None or self. hEla != None or self.hIcecap != None:
+            self._build_Ice_function()
+
 
     def _average_wave(self):
         """
@@ -259,6 +278,116 @@ class forceSim:
                 if time > self.seatime.max():
                     time = self.seatime.max()
                 self.sealevel = z0 + self.seaFunc(time)
+
+        return
+    
+    #Matt Update
+    def _build_Ice_function(self):
+        """
+        Using Pandas library to read the glacier elevation files and define glacier interpolation
+        function based on Scipy 1D linear function.
+        """
+
+        icedata = None
+        if isinstance(self.hTerm, str) and os.path.isfile(self.hTerm):
+            # Read sea level file
+            icedata = pandas.read_csv(
+                self.hTerm,
+                sep=r"\s+",
+                engine="c",
+                header=None,
+                na_filter=False,
+                dtype=numpy.float64,
+                low_memory=False,
+            )
+
+            self.termtime = icedata.values[:, 0]
+            gval = icedata.values[:, 1]
+            self.termFunc = interpolate.interp1d(self.termtime, gval, kind="linear")
+        else:
+            self.termFunc = None
+        
+        icedata = None
+        gval    = None
+
+        if isinstance(self.hEla, str) and os.path.isfile(self.hEla):
+            # Read sea level file
+            icedata = pandas.read_csv(
+                self.hEla,
+                sep=r"\s+",
+                engine="c",
+                header=None,
+                na_filter=False,
+                dtype=numpy.float64,
+                low_memory=False,
+            )
+
+            self.elatime = icedata.values[:, 0]
+            gval = icedata.values[:, 1]
+            self.elaFunc = interpolate.interp1d(self.elatime, gval, kind="linear")
+        else:
+            self.elaFunc = None
+        
+        icedata = None
+        gval    = None
+
+        if isinstance(self.hIcecap, str) and os.path.isfile(self.hIcecap):
+            # Read sea level file
+            icedata = pandas.read_csv(
+                self.hIcecap,
+                sep=r"\s+",
+                engine="c",
+                header=None,
+                na_filter=False,
+                dtype=numpy.float64,
+                low_memory=False,
+            )
+
+            self.icecaptime = icedata.values[:, 0]
+            gval = icedata.values[:, 1]
+            self.icecapFunc = interpolate.interp1d(self.icecaptime, gval, kind="linear")
+        else:
+            self.icecapFunc = None
+
+
+    #Matt Update
+    def getIceParameters(self, time):
+        """
+        This function computes for a given time the sea level according to input file parameters.
+
+        Important:
+            By default, the sea-level position in **badlands** is set to 0 m. If you wish to set it to another position you can use the <position> parameter in the XML input file, that changes the sea-level to a new value relative to sea-level. Another option consists in defining your own sea-level curve (<curve>) or using a published one (*e.g.* Haq curve for example).
+
+        Args:
+            time : float requested time for which to compute sea level elevation.
+            udw : integer set to 0 if a geodynamic model (like Underworld) is not used and 1 otherwise.
+            z0 : float equal to the position of the relative sealevel if udw is set to 1.
+        """
+
+        if self.termFunc is not None:
+            if time < self.termtime.min():
+                time = self.termtime.min()
+            if time > self.termtime.max():
+                time = self.termtime.max()
+            self.hTerm = float(self.termFunc(time))
+
+        if self.elaFunc is not None:
+            if time < self.elatime.min():
+                time = self.elatime.min()
+            if time > self.elatime.max():
+                time = self.elatime.max()
+            self.hEla = float(self.elaFunc(time))
+
+        if self.icecapFunc is not None:
+            if time < self.icecaptime.min():
+                time = self.icecaptime.min()
+            if time > self.icecaptime.max():
+                time = self.icecaptime.max()
+            self.hIcecap = float(self.icecapFunc(time))
+            #Matt Update
+            print("hIceCap == ", self.hIcecap)
+
+
 
         return
 

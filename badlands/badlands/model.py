@@ -58,7 +58,6 @@ class Model(object):
         """
         State object for the Badlands model.
         """
-
         # Simulation state
         self.tNow = 0.0
         self.waveID = 0
@@ -73,6 +72,8 @@ class Model(object):
         self.pelaval = None
         self.applyDisp = False
         self.simStarted = False
+
+        print('Hey Matt!, this is the badlands-workspace instance. Now with glaciers!')
 
     def load_xml(self, filename, verbose=False):
         """
@@ -126,7 +127,7 @@ class Model(object):
         """
         Build TIN based on regular grid.
         """
-
+        
         # Construct Badlands mesh and grid to run simulation
         (
             self.recGrid,
@@ -356,6 +357,17 @@ class Model(object):
                     self.tNow, self.elevation, self.inIDs
                 )
 
+            #Matt Update
+            #Load Glacier Properties
+            self.force.getIceParameters(self.tNow)
+
+            if self.flow.iceTH is not None:
+                self.force.icethick = self.flow.iceTH
+            else:
+                self.flow.iceTH = np.zeros_like(self.elevation)
+                self.force.icethick = self.flow.iceTH
+
+
             # Initialize waveFlux at tStart
             # if self.tNow == self.input.tStart:
             #     self.force.initWaveFlux(self.inIDs)
@@ -498,10 +510,12 @@ class Model(object):
                     self.input, self.recGrid, self.elevation
                 )
                 self.force.getSea(self.tNow, self.input.udw, ref_elev)
+
                 self.tinFlex = self.flex.get_flexure(
                     self.elevation,
                     self.cumdiff,
                     self.force.sealevel,
+                    self.flow.iceTH,
                     self.recGrid.boundsPt,
                     initFlex=False,
                 )
@@ -790,7 +804,7 @@ class Model(object):
                 )
             else:
                 self.tNow = tEnd
-
+        
         tloop = time.process_time() - last_time
         print("tNow = %s (%0.02f seconds)" % (self.tNow, tloop))
 
@@ -805,6 +819,7 @@ class Model(object):
                 self.elevation,
                 self.cumdiff,
                 self.force.sealevel,
+                self.flow.iceTH,
                 self.recGrid.boundsPt,
                 initFlex=False,
             )

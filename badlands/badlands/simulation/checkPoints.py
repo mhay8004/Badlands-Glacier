@@ -185,6 +185,7 @@ def write_checkpoints(
             rockOn,
             prop[lGIDs, :],
             force.sealevel,
+            flow.iceTH
         )
     else:
         visualiseTIN.write_hdf5(
@@ -211,6 +212,7 @@ def write_checkpoints(
             rockOn,
             prop[lGIDs, :],
             force.sealevel,
+            flow.iceTH
         )
 
     if flow.sedload is not None:
@@ -291,6 +293,7 @@ def write_checkpoints(
         waveOn,
         rockOn,
         prop.shape[1],
+        flow.iceTH
     )
 
     visualiseFlow.write_xmf(

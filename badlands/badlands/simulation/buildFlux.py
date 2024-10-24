@@ -135,7 +135,10 @@ def streamflow(
 
     # Compute discharge
     walltime = time.process_time()
-    flow.compute_flow(force.sealevel, elevation, FVmesh.control_volumes, riverrain)
+    if not input.iceFlag:
+        flow.compute_flow(force.sealevel, elevation, FVmesh.control_volumes, riverrain)
+    else:
+        flow.cmptTotalflow(force.sealevel, elevation, FVmesh.control_volumes, riverrain, force.hTerm, force.hEla)
     if verbose:
         print(" -   compute discharge ", time.process_time() - walltime)
 
@@ -317,21 +320,42 @@ def sediment_flux(
 
     # Initial cumulative elevation change
     walltime = time.process_time()
-    timestep, sedchange, erosion, deposition, slopeTIN = flow.compute_sedflux(
-        FVmesh.control_volumes,
-        elevation,
-        rain,
-        fillH,
-        CFLtime,
-        activelay,
-        eroCk,
-        force.rivQs,
-        force.sealevel,
-        input.perc_dep,
-        input.slp_cr,
-        FVmesh.neighbours,
-        verbose=False,
-    )
+
+    if not input.iceFlag:
+        timestep, sedchange, erosion, deposition, slopeTIN = flow.compute_sedflux(
+            FVmesh.control_volumes,
+            elevation,
+            rain,
+            fillH,
+            CFLtime,
+            activelay,
+            eroCk,
+            force.rivQs,
+            force.sealevel,
+            input.perc_dep,
+            input.slp_cr,
+            FVmesh.neighbours,
+            verbose=False,
+        )
+    else:
+        timestep, sedchange, erosion, deposition, slopeTIN = flow.compute_sedflux_glacier(
+            FVmesh.control_volumes,
+            elevation,
+            rain,
+            fillH,
+            CFLtime,
+            activelay,
+            eroCk,
+            force.rivQs,
+            force.sealevel,
+            input.perc_dep,
+            input.slp_cr,
+            FVmesh.neighbours,
+            force.hIcecap,
+            verbose=False,
+        )
+        flow.cmptIceThickness(force.sealevel, elevation, force.hTerm, force.hEla)
+
 
     if timestep < CFLtime:
         if input.minDT > tEnd - tNow:
@@ -529,7 +553,7 @@ def sediment_flux(
         cumhill += tdiff
         # Update active layer
         straTIN.update_layers(erosion, deposition, elevation, verbose)
-
+    
     if input.btype == "slope":
         elevation[: len(flow.parentIDs)] = elevation[flow.parentIDs] - 0.1
     elif input.btype == "flat":
